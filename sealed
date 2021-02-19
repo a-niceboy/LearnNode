@@ -1,0 +1,38 @@
+# c++实现密封类的两种方式
+# 两种方式主要利用c++虚基类的特点，在c++中从具有虚基类的类在初始化中进行了特殊处理，在派生关系中，有且仅有最底层次的派生类的构造函数初始化虚基类，忽略中间的派生类对基类的构造
+# 具有虚基类的继承关系中，最底层派生类必须对基类进行构造
+
+# 一，基类私有构造，设置友元泛型，密封类虚继承，派生类不是友元类不能构造基类
+template<typename T>
+class SealedBase {
+    friend T;
+private:
+    SealedBase() {
+        cout << "SealedBase" << endl;
+    }
+};
+
+class Sealed : virtual public SealedBase<Sealed> {
+public:
+    Sealed() {
+        cout << "Sealed" << endl;
+    }
+};
+
+# 二，基类保护构造，密封类虚私有继承，私有继承只有密封类可以得到基类构造
+class SealedBase {
+protected:
+    SealedBase() {
+        cout << "SealedBase" << endl;
+    }
+};
+
+class Sealed : virtual private SealedBase {
+public:
+    Sealed() {
+        cout << "Sealed" << endl;
+    }
+};
+
+# 问题和不足
+# 静态类依旧可以继承
