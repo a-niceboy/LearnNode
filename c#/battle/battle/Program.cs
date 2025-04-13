@@ -523,16 +523,13 @@ namespace battleEngine
                         // 发布攻击事件而不是直接调用
                         Log.log($"{unit.name} 发起技能 {skill.skillName}");
 
-                        //using (var pooledEvent = new PooledEvent<DamageEvent>(EventPool<DamageEvent>.Instance.Get()))
-                        //{
-                        //    var damageEvent = pooledEvent.Event;
-                        //    damageEvent.Source = unit;
-                        //    damageEvent.Target = unit.GetSkillTarget(skill.skillTargetType);
-                        //    damageEvent.Damage = effect.value;
-                        //    damageEvent.IsSkillDamage = true;
-                        //    EventManager.Publish(damageEvent);
-                        //}
-                        
+                        var damageEvent = EventPool<DamageEvent>.Instance.Get();
+                        damageEvent.Source = unit;
+                        damageEvent.Target = unit.GetSkillTarget(skill.skillTargetType);
+                        damageEvent.Damage = effect.value;
+                        damageEvent.IsSkillDamage = true;
+                        EventManager.Publish(damageEvent);
+                        EventPool<DamageEvent>.Instance.Release(damageEvent);
                         break;
                     case SkillEffectType.Heal:
                         Log.log($"{unit.name} 发起技能 {skill.skillName}");
@@ -546,16 +543,16 @@ namespace battleEngine
                         {
                             Log.log($"{unit.name} 发起Buff {skill.skillName}");
 
-                            //using (var pooledEvent = new PooledEvent<BuffApplyEvent>(EventPool<BuffApplyEvent>.Instance.Get()))
-                            //{
-                            //    var buffApplyEvent = pooledEvent.Event;
-                            //    buffApplyEvent.Source = unit;
-                            //    buffApplyEvent.Target = target;
-                            //    buffApplyEvent.BuffType = effect.buffType;
-                            //    buffApplyEvent.Value = effect.value;
-                            //    buffApplyEvent.DurationFrames = effect.durationFrames;
-                            //    EventManager.Publish(buffApplyEvent);
-                            //}
+                            var buffApplyEvent = EventPool<BuffApplyEvent>.Instance.Get();
+                            {
+                                buffApplyEvent.Source = unit;
+                                buffApplyEvent.Target = target;
+                                buffApplyEvent.BuffType = effect.buffType;
+                                buffApplyEvent.Value = effect.value;
+                                buffApplyEvent.DurationFrames = effect.durationFrames;
+                                EventManager.Publish(buffApplyEvent);
+                                EventPool<BuffApplyEvent>.Instance.Release(buffApplyEvent);
+                            }
                         }
 
                         break;
@@ -715,14 +712,14 @@ namespace battleEngine
                     {
                         unitBuffs.Remove(unitBuff);
 
-                        //using (var pooledEvent = new PooledEvent<BuffExpiredEvent>(EventPool<BuffExpiredEvent>.Instance.Get()))
-                        //{
-                        //    var buffExpiredEvent = pooledEvent.Event;
-                        //    buffExpiredEvent.Source = unit;
-                        //    buffExpiredEvent.BuffType = unitBuff.Type;
-                        //    EventManager.Publish(buffExpiredEvent);
-                        //}
                         Log.log($"{unit.name} 的 {unitBuff.Type} 效果消失");
+                        var buffExpiredEvent = EventPool<BuffExpiredEvent>.Instance.Get();
+                        {
+                            buffExpiredEvent.Source = unit;
+                            buffExpiredEvent.BuffType = unitBuff.Type;
+                            EventManager.Publish(buffExpiredEvent);
+                            EventPool<BuffExpiredEvent>.Instance.Release(buffExpiredEvent);
+                        }
                     }
                 }
             }
@@ -863,14 +860,14 @@ namespace battleEngine
                 {
                     // 发布攻击事件而不是直接调用
                     Log.log($"{name} 发起攻击 {target.name}");
-                    //using (var pooledEvent = new PooledEvent<AttackEvent>(EventPool<AttackEvent>.Instance.Get()))
-                    //{
-                    //    var attackEvent = pooledEvent.Event;
-                    //    attackEvent.Source = this;
-                    //    attackEvent.Target = target;
-                    //    attackEvent.Damage = attackValue;
-                    //    EventManager.Publish(attackEvent);
-                    //}
+                    var attackEvent = EventPool<AttackEvent>.Instance.Get();
+                    {
+                        attackEvent.Source = this;
+                        attackEvent.Target = target;
+                        attackEvent.Damage = attackValue;
+                        EventManager.Publish(attackEvent);
+                        EventPool<AttackEvent>.Instance.Release(attackEvent);
+                    }
                 }
             }
         }
@@ -901,12 +898,12 @@ namespace battleEngine
             {
                 Die();
 
-                //using (var pooledEvent = new PooledEvent<DeathEvent>(EventPool<DeathEvent>.Instance.Get()))
-                //{
-                //    var deathEvent = pooledEvent.Event;
-                //    deathEvent.Source = this;
-                //    EventManager.Publish(deathEvent);
-                //}
+                var deathEvent = EventPool<DeathEvent>.Instance.Get();
+                {
+                    deathEvent.Source = this;
+                    EventManager.Publish(deathEvent);
+                    EventPool<DeathEvent>.Instance.Release(deathEvent);
+                }
             };
         }
 
@@ -997,14 +994,14 @@ namespace battleEngine
             }
 
             // 将攻击事件转换为伤害事件 伤害结果统一优先事件处理
-            //using (var pooledEvent = new PooledEvent<DamageEvent>(EventPool<DamageEvent>.Instance.Get()))
-            //{
-            //    var damageEvent = pooledEvent.Event;
-            //    damageEvent.Source = e.Source;
-            //    damageEvent.Target = e.Target;
-            //    damageEvent.Damage = e.Damage;
-            //    EventManager.Publish(damageEvent);
-            //}
+            var damageEvent = EventPool<DamageEvent>.Instance.Get();
+            {
+                damageEvent.Source = e.Source;
+                damageEvent.Target = e.Target;
+                damageEvent.Damage = e.Damage;
+                EventManager.Publish(damageEvent);
+                EventPool<DamageEvent>.Instance.Release(damageEvent);
+            }
         }
 
         private bool CheckDodge(BattleUnit unit)
@@ -1022,33 +1019,33 @@ namespace battleEngine
             {
                 Finish(CampType.Red);
 
-                //using (var pooledEvent = new PooledEvent<BattleEndEvent>(EventPool<BattleEndEvent>.Instance.Get()))
-                //{
-                //    var battleEndEvent = pooledEvent.Event;
-                //    battleEndEvent.WinningCamp = CampType.Red;
-                //    EventManager.Publish(battleEndEvent);
-                //}
+                var battleEndEvent = EventPool<BattleEndEvent>.Instance.Get();
+                {
+                    battleEndEvent.WinningCamp = CampType.Red;
+                    EventManager.Publish(battleEndEvent);
+                    EventPool<BattleEndEvent>.Instance.Release(battleEndEvent);
+                }
             }
             else if (battleGroupRed.IsEmpty())
             {
-                Finish(CampType.Red);
-                //using (var pooledEvent = new PooledEvent<BattleEndEvent>(EventPool<BattleEndEvent>.Instance.Get()))
-                //{
-                //    var battleEndEvent = pooledEvent.Event;
-                //    battleEndEvent.WinningCamp = CampType.Blue;
-                //    EventManager.Publish(battleEndEvent);
-                //}
+                Finish(CampType.Blue);
+                var battleEndEvent = EventPool<BattleEndEvent>.Instance.Get();
+                {
+                    battleEndEvent.WinningCamp = CampType.Blue;
+                    EventManager.Publish(battleEndEvent);
+                    EventPool<BattleEndEvent>.Instance.Release(battleEndEvent);
+                }
             }
         }
 
 
         public void Start()
         {
-            //using (var pooledEvent = new PooledEvent<BattleStartEvent>(EventPool<BattleStartEvent>.Instance.Get()))
-            //{
-            //    var battleStartEvent = pooledEvent.Event;
-            //    EventManager.Publish(battleStartEvent);
-            //}
+            var battleStartEvent = EventPool<BattleStartEvent>.Instance.Get();
+            {
+                EventManager.Publish(battleStartEvent);
+                EventPool<BattleStartEvent>.Instance.Release(battleStartEvent);
+            }
             isRun = true;
             while (isRun)
             {
@@ -1226,13 +1223,13 @@ namespace battleEngine
             BattleUnit blueUnit = new BattleUnit("蓝1", 20, 2, 2, CampType.Blue);
             BattleUnit blueUnit2 = new BattleUnit("蓝2", 20, 2, 2, CampType.Blue);
 
-            //BattleManager.Instance.AddUnit(redUnit);
-            //BattleManager.Instance.AddUnit(blueUnit);
-            //BattleManager.Instance.AddUnit(blueUnit2);
+            BattleManager.Instance.AddUnit(redUnit);
+            BattleManager.Instance.AddUnit(blueUnit);
+            BattleManager.Instance.AddUnit(blueUnit2);
 
-            //BattleManager.Instance.Start();
+            BattleManager.Instance.Start();
 
-            Util.PerformanceTest();
+            //Util.PerformanceTest();
 
             Console.ReadLine();
         }

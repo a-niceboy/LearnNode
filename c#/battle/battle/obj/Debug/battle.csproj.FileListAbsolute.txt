@@ -5,3 +5,10 @@ C:\Users\15720\Documents\vscode\battle\battle\bin\Debug\battle.exe
 C:\Users\15720\Documents\vscode\battle\battle\bin\Debug\battle.pdb
 C:\Users\15720\Documents\vscode\battle\battle\obj\Debug\battle.exe
 C:\Users\15720\Documents\vscode\battle\battle\obj\Debug\battle.pdb
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\obj\Debug\battle.csproj.AssemblyReference.cache
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\obj\Debug\battle.csproj.CoreCompileInputs.cache
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\obj\Debug\battle.exe
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\obj\Debug\battle.pdb
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\bin\Debug\battle.exe.config
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\bin\Debug\battle.exe
+C:\Users\15720\Documents\vscode\LearnNode\c#\battle\battle\bin\Debug\battle.pdb
