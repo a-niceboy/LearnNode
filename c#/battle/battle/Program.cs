@@ -259,8 +259,7 @@ namespace battleEngine
 
     public class EventPool<T> where T : IPoolableEvent, new()
     {
-        private readonly T[] _pool;
-        private int _index;
+        private readonly ConcurrentStack<T> _pool = new ConcurrentStack<T>();
         private readonly Func<T> _factory;
 
         private static EventPool<T> _instance;
@@ -275,29 +274,27 @@ namespace battleEngine
             }
         }
 
-        private EventPool(int size = 1024)
+        private EventPool()
         {
-            _pool = new T[size];
             _factory = () => new T();
 
             // 预填充对象
-            for (int i = 0; i < size; i++)
+            for (int i = 0; i < 1024; i++)
             {
-                _pool[i] = _factory();
+                _pool.Push(_factory());
             }
-            _index = size - 1;
         }
         public T Get()
         {
-            return _index >= 0 ? _pool[_index--] : _factory();
+            if (_pool.TryPop(out T item))
+                return item;
+            return _factory();
         }
 
         public void Release(T item)
         {
-            if (_index < _pool.Length - 1 && item != null) {
-                item.Reset();
-                _pool[++_index] = item;
-            }
+            item.Reset();
+            _pool.Push(item);
         }
     }
 
@@ -392,7 +389,6 @@ namespace battleEngine
 
     #endregion
 
-    
     #region 技能
 
     // 技能状态
@@ -405,6 +401,7 @@ namespace battleEngine
 
     public enum SkillTargetType
     {
+        None,
         Own,
         TeamOne,
         TeamAll,
@@ -414,6 +411,12 @@ namespace battleEngine
     public class SkillData
     {
         public string skillName;
+        public int cooldownFrames;  // 冷却时间(帧数)
+        public int cost;           // 消耗(MP/能量等)
+        public SkillTargetType skillTargetType;
+        public List<SkillEffect> effects;
+
+        public SkillState state;
         // 在SkillData中添加属性验证
         private int _remainingCooldown;
         public int RemainingCooldown
@@ -426,19 +429,30 @@ namespace battleEngine
                     state = SkillState.Ready;
             }
         }
-        public int cooldownFrames;  // 冷却时间(帧数)
-        public int cost;           // 消耗(MP/能量等)
-
-        public SkillTargetType skillTargetType;
-
-        public SkillState state;
-        public List<SkillEffect> effects;
 
         public SkillData()
         {
-            RemainingCooldown = 0;
+            skillName = "nullName";
+            cooldownFrames = 0;
             state = SkillState.Ready;
+            cost = -1;
+            skillTargetType = SkillTargetType.None;
             effects = new List<SkillEffect>();
+        }
+
+        public SkillData(SkillData s)
+        {
+            skillName = s.skillName;
+            cooldownFrames = s.cooldownFrames;
+            state = SkillState.Ready;
+            cost = s.cost;
+            skillTargetType = s.skillTargetType;
+            effects = new List<SkillEffect>();
+
+            for (int i = 0; i < s.effects.Count; i++)
+            {
+                effects.Add(new SkillEffect(s.effects[i]));
+            }
         }
     }
     public enum SkillEffectType { Damage, Heal, Buff }
@@ -704,22 +718,27 @@ namespace battleEngine
             {
                 var unitBuffs = kv.Value;
                 var unit = kv.Key;
-                for (int i = 0; i < unitBuffs.Count; i++)
+                var toRemove = new List<ActiveBuff>();
+                foreach (var buff in unitBuffs)
                 {
-                    var unitBuff = unitBuffs[i];
-                    unitBuff.RemainingFrames--;
-                    if (unitBuff.RemainingFrames <= 0)
+                    buff.RemainingFrames--;
+                    if (buff.RemainingFrames <= 0)
                     {
-                        unitBuffs.Remove(unitBuff);
+                        toRemove.Add(buff);
+                    }
+                }
 
-                        Log.log($"{unit.name} 的 {unitBuff.Type} 效果消失");
-                        var buffExpiredEvent = EventPool<BuffExpiredEvent>.Instance.Get();
-                        {
-                            buffExpiredEvent.Source = unit;
-                            buffExpiredEvent.BuffType = unitBuff.Type;
-                            EventManager.Publish(buffExpiredEvent);
-                            EventPool<BuffExpiredEvent>.Instance.Release(buffExpiredEvent);
-                        }
+                foreach (var buff in toRemove)
+                {
+                    unitBuffs.Remove(buff);
+
+                    Log.log($"{unit.name} 的 {buff.Type} 效果消失");
+                    var buffExpiredEvent = EventPool<BuffExpiredEvent>.Instance.Get();
+                    {
+                        buffExpiredEvent.Source = unit;
+                        buffExpiredEvent.BuffType = buff.Type;
+                        EventManager.Publish(buffExpiredEvent);
+                        EventPool<BuffExpiredEvent>.Instance.Release(buffExpiredEvent);
                     }
                 }
             }
@@ -737,13 +756,7 @@ namespace battleEngine
         public int Hp
         {
             get => _hp;
-            set
-            {
-                if (value <= MaxHp)
-                {
-                    _hp = value;
-                }
-            }
+            set { _hp = Math.Max(0, Math.Min(MaxHp, value)); }
         }
         public int defense;
         public CampType camp;
@@ -782,13 +795,13 @@ namespace battleEngine
                 skill.SetUnit(this);
             }
 
-            skill.SetSkill(skillData);
+            skill.SetSkill(new SkillData(skillData));
         }
 
         public void Update()
         {
             int speedBonus = BattleManager.Instance.buffSystem.GetSpeedBonus(this);
-            int actualAttackFrame = Math.Min(Config.minAttFrame, attackFrame - speedBonus);
+            int actualAttackFrame = Math.Max(Config.minAttFrame, attackFrame - speedBonus);
 
             curFrame++;
             if (curFrame >= actualAttackFrame)
@@ -803,6 +816,7 @@ namespace battleEngine
 
             if (skill != null)
             {
+                bool doSkill = TrySkill();
                 skill.Update();
             }
         }
@@ -850,25 +864,19 @@ namespace battleEngine
         public void TryAttack()
         {
             BattleUnit target = GetTarget();
-            if (target != null)
+            if (target == null)
             {
-                bool trySkill = TrySkill();
-                if (trySkill)
-                {
-                }
-                else
-                {
-                    // 发布攻击事件而不是直接调用
-                    Log.log($"{name} 发起攻击 {target.name}");
-                    var attackEvent = EventPool<AttackEvent>.Instance.Get();
-                    {
-                        attackEvent.Source = this;
-                        attackEvent.Target = target;
-                        attackEvent.Damage = attackValue;
-                        EventManager.Publish(attackEvent);
-                        EventPool<AttackEvent>.Instance.Release(attackEvent);
-                    }
-                }
+                return;
+            }
+            // 发布攻击事件而不是直接调用
+            Log.log($"{name} 发起攻击 {target.name}");
+            var attackEvent = EventPool<AttackEvent>.Instance.Get();
+            {
+                attackEvent.Source = this;
+                attackEvent.Target = target;
+                attackEvent.Damage = attackValue;
+                EventManager.Publish(attackEvent);
+                EventPool<AttackEvent>.Instance.Release(attackEvent);
             }
         }
 
@@ -876,17 +884,11 @@ namespace battleEngine
         {
             if (e.Target == this)
             {
-                int _defense = defense;
-
-                _defense += BattleManager.Instance.buffSystem.GetAttackBonus(this);
-
-                int finalDamage = Math.Max(1, e.Damage - _defense);
-
                 string damageSource = e.IsSkillDamage ? "技能" : "攻击";
                 string critText = e.IsCritical ? "暴击！" : "";
-                Log.log($"{name} 受到{e.Source.name}的{damageSource}{critText} 伤害:{e.Damage} 防御{_defense} 血量:{Hp}->{Hp - finalDamage}");
+                Log.log($"{name} 受到{e.Source.name}的{damageSource}{critText} 伤害:{e.Damage} 防御{defense} 血量:{Hp}->{Hp - e.Damage}");
 
-                ApplyDamage(finalDamage);
+                ApplyDamage(e.Damage);
             }
         }
 
@@ -908,7 +910,6 @@ namespace battleEngine
         }
 
     }
-
 
     #endregion
 
@@ -1050,6 +1051,8 @@ namespace battleEngine
             while (isRun)
             {
                 Update();
+
+                Log.log("===============================================");
                 Thread.Sleep(16); // 约60FPS
             }
         }
@@ -1094,6 +1097,9 @@ namespace battleEngine
             BattleUnit ret = null;
             switch (skillTargetType)
             {
+                case SkillTargetType.None:
+                    Log.log("技能没有目标！！");
+                    break;
                 case SkillTargetType.Own:
                     ret = battleUnit;
                     break;
@@ -1170,7 +1176,6 @@ namespace battleEngine
     }
     #endregion
 
-
     #region 入口
     class Program
     {
@@ -1181,6 +1186,7 @@ namespace battleEngine
             {
                 skillName = "火球术",
                 cooldownFrames = 15,
+                skillTargetType = SkillTargetType.EnemyOne,
                 cost = 10,
                 effects = new List<SkillEffect> {
                     new SkillEffect {
@@ -1193,6 +1199,7 @@ namespace battleEngine
             {
                 skillName = "回血术",
                 cooldownFrames = 15,
+                skillTargetType = SkillTargetType.Own,
                 cost = 10,
                 effects = new List<SkillEffect> {
                     new SkillEffect {
@@ -1205,6 +1212,7 @@ namespace battleEngine
             {
                 skillName = "加攻速",
                 cooldownFrames = 5,
+                skillTargetType = SkillTargetType.Own,
                 cost = 10,
                 effects = new List<SkillEffect> {
                     new SkillEffect {
